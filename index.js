@@ -9,6 +9,9 @@ const effiweb = knex(knex_config['effiweb'])
 const efficms = knex(knex_config['efficms'])
 const effiwp = knex(knex_config['effiwp'])
 
+const root = process.env.ARTICLE_ROOT
+const wpRoot = process.env.WP_ROOT
+
 const oldOldEffiUsers = effiweb('articles').distinct('author')
   .then(rows => rows.map(r => r.author))
   .then(authors => authors.filter(x => x))
@@ -28,9 +31,29 @@ const oldOldArticles = () => effiweb('articles').select('*').then(articles => {
   })
 })
 
-oldOldEffiUsers
-  .then(oldOldArticles)
+const oldOldAttachments = () => {
+  const cmd = (command) => child_process.execSync(command, { encoding: 'utf8'})
+  const uploadsRoot = `${wpRoot}/wp-content/uploads`
+  cmd(`mkdir -p ${uploadsRoot}`)
+  cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type d -print`).split('\n')
+    .forEach(d => cmd(`mkdir -p ${uploadsRoot}/${d}`))
+  cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type f -print`).split('\n')
+    .filter(f => f.length > 0
+            && !f.includes('.htaccess')
+            && !f.endsWith('.html')
+            && !f.endsWith('~')
+            && !f.endsWith('.inc')
+            && !f.endsWith('.php'))
+    .forEach(f => console.log(f)||cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`))
+
+  return Promise.resolve('ok')
+
+}
+
+// oldOldEffiUsers
+//   .then(oldOldArticles)
 // oldOldArticles()
+oldOldAttachments()
   .then(console.log)
 
 function makeWpArticle(article) {
@@ -78,7 +101,6 @@ function postNameFor(article) {
 }
 
 function articleBody(article) {
-  const root = process.env.ARTICLE_ROOT
   console.log('AAAAA',article.linktarget)
   if (!article.linktarget.endsWith('.html'))
     return Promise.resolve(null)
