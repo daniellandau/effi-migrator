@@ -1,0 +1,16 @@
+{
+  "name": "effi-migrator",
+  "version": "1.0.0",
+  "description": "Migrate effi site from old to wordpress",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "knex": "^0.14.4",
+    "mysql": "^2.15.0",
+    "pg": "^7.4.1"
+  }
+}
