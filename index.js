@@ -39,7 +39,7 @@ function makeWpArticle(article) {
     articleBody(article)
   ]).then(([post_author, post_content]) => post_content ? ({
     post_author,
-    post_date: article.published || dateFromContent(post_content) || new Date(),
+    post_date: article.published || dateFromContent(post_content) || otherDateRules(article) || new Date(),
     post_content,
     post_title: article.title,
     post_status: 'publish',
@@ -49,6 +49,12 @@ function makeWpArticle(article) {
     post_excerpt: article.summary || '',
     post_type: 'post'
   }) : null)
+}
+
+function otherDateRules(article) {
+  if (article.linktarget.endsWith('toimintasuunnitelma-2003.html'))
+    return new Date(2003, 5, 13)
+  return null
 }
 
 function dateFromContent(post_content) {
