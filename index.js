@@ -73,18 +73,26 @@ function makeWpArticle(article) {
     const post_date = article.published || dateFromContent(post_content) || otherDateRules(article)
     if (!post_date) return null
 
-    return {
-      post_author,
-      post_date,
-      post_content,
-      post_title: article.title,
-      post_status: 'publish',
-      post_name: postNameFor(article),
-      comment_status: 'closed',
-      ping_status: 'open',
-      post_excerpt: article.summary || '',
-      post_type: 'post'
-    }
+    const oldUrl = `/${article.linktarget}`
+    const oldUrlWithoutIndexHtml = `/${article.linktarget.replace(/index\.html$/, '')}`
+    const post_name = postNameFor(article)
+    const newUrl = `/${post_name}`
+    return insertIfMissing('wp_redirection_items', { 'url': oldUrl },
+                           effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl)))
+      .then(() => insertIfMissing('wp_redirection_items', { 'url': oldUrlWithoutIndexHtml },
+                                 effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrlWithoutIndexHtml, newUrl))))
+      .then(() => ({
+        post_author,
+        post_date,
+        post_content,
+        post_title: article.title,
+        post_status: 'publish',
+        post_name,
+        comment_status: 'closed',
+        ping_status: 'open',
+        post_excerpt: article.summary || '',
+        post_type: 'post'
+      }))
   })
 }
 
