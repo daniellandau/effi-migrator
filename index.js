@@ -75,6 +75,7 @@ function articleBody(article) {
     return Promise.resolve(null)
 
   let inBody = false
+  let inPhp = false
   const fileCommandOutput = child_process.spawnSync('file', [ filePath, '-b' ], { encoding: 'utf8'}).stdout.split(',')[1].split(' ')[1]
   const guessedEncoding = [ 'ISO-8859', 'Non-ISO' ].includes(fileCommandOutput) ? 'latin1' : fileCommandOutput
   console.log(guessedEncoding)
@@ -83,12 +84,21 @@ function articleBody(article) {
       if (line.includes('<body>')) {
         inBody = true
         return false
-      } else if (line.includes('</body>')) {
+      }
+      if (line.includes('</body>')) {
         inBody = false
         return false
-      } else {
-        return inBody
       }
+      if (line.includes('<?')) {
+        inPhp = true
+        return false
+      }
+      if (line.includes('?>')) {
+        inPhp = false
+        return false
+      }
+
+      return inBody && !inPhp
     }).join('\n'))
     .catch(e => console.log(e) || Promise.resolve(null))
 }
