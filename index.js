@@ -38,23 +38,40 @@ const oldOldAttachments = () => {
   cmd(`mkdir -p ${uploadsRoot}`)
   cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type d -print`).split('\n')
     .forEach(d => cmd(`mkdir -p ${uploadsRoot}/${d}`))
-  cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type f -print`).split('\n')
-    .filter(f => f.length > 0
-            && !f.includes('.htaccess')
-            && !f.endsWith('.html')
-            && !f.endsWith('~')
-            && !f.endsWith('.inc')
-            && !f.endsWith('.php'))
-    .forEach(f => console.log(f)||cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`))
+  const promises = cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type f -print`).split('\n')
+        .filter(f => f.length > 0
+                && !f.includes('.htaccess')
+                && !f.endsWith('.html')
+                && !f.endsWith('~')
+                && !f.endsWith('.inc')
+                && !f.endsWith('.php'))
+        .map(f => {
+          console.log(f)
+          // cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`)
+          return f
+        })
+        .map(f => f.replace(/^\./, ''))
+        .map(f =>
+             insertIfMissing('wp_redirection_items', { 'url': f },
+                             effiwp('wp_redirection_items').insert({
+                               url: f,
+                               regex: 0,
+                               position: 0,
+                               group_id: 1,
+                               status: 'enabled',
+                               action_type: 'url',
+                               action_code: 301,
+                               action_data: `/wp-content/uploads${f}`,
+                               match_type: 'url'
+                             })))
 
-  return Promise.resolve('ok')
-
+  return Promise.all(promises)
 }
 
 // oldOldEffiUsers
 //   .then(oldOldArticles)
-oldOldArticles()
-// oldOldAttachments()
+// oldOldArticles()
+oldOldAttachments()
   .then(console.log)
 
 function makeWpArticle(article) {
