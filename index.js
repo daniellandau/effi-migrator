@@ -147,7 +147,7 @@ function articleBody(article) {
         inPhp = false
         return false
       }
-      if (line.search(new RegExp(`<h1.*${article.title}`)) !== -1)
+      if (line.search(new RegExp(`<h.*${article.title}`)) !== -1)
         return false
 
       return inBody && !inPhp
