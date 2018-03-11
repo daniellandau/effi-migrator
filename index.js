@@ -39,7 +39,7 @@ function makeWpArticle(article) {
     articleBody(article)
   ]).then(([post_author, post_content]) => post_content ? ({
     post_author,
-    post_date: article.published || new Date(),
+    post_date: article.published || dateFromContent(post_content) || new Date(),
     post_content,
     post_title: article.title,
     post_status: 'publish',
@@ -49,6 +49,13 @@ function makeWpArticle(article) {
     post_excerpt: article.summary || '',
     post_type: 'post'
   }) : null)
+}
+
+function dateFromContent(post_content) {
+  const match = post_content.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/)
+  return match
+    ? new Date(Date.UTC(match[3], Number(match[2]) - 1, match[1]))
+    : null
 }
 
 function postNameFor(article) {
