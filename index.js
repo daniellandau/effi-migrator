@@ -37,18 +37,24 @@ function makeWpArticle(article) {
   return Promise.all([
     articleWpAuthorId(article),
     articleBody(article)
-  ]).then(([post_author, post_content]) => post_content ? ({
-    post_author,
-    post_date: article.published || dateFromContent(post_content) || otherDateRules(article) || new Date(),
-    post_content,
-    post_title: article.title,
-    post_status: 'publish',
-    post_name: postNameFor(article),
-    comment_status: 'closed',
-    ping_status: 'open',
-    post_excerpt: article.summary || '',
-    post_type: 'post'
-  }) : null)
+  ]).then(([post_author, post_content]) => {
+    if (!post_content) return null
+    const post_date = article.published || dateFromContent(post_content) || otherDateRules(article)
+    if (!post_date) return null
+
+    return {
+      post_author,
+      post_date,
+      post_content,
+      post_title: article.title,
+      post_status: 'publish',
+      post_name: postNameFor(article),
+      comment_status: 'closed',
+      ping_status: 'open',
+      post_excerpt: article.summary || '',
+      post_type: 'post'
+    }
+  })
 }
 
 function otherDateRules(article) {
