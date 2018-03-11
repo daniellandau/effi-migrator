@@ -73,14 +73,16 @@ function makeWpArticle(article) {
     const post_date = article.published || dateFromContent(post_content) || otherDateRules(article)
     if (!post_date) return null
 
-    const oldUrl = `/${article.linktarget}`
-    const oldUrlWithoutIndexHtml = `/${article.linktarget.replace(/index\.html$/, '')}`
+    const oldUrls =
+          [ `/${article.linktarget}`,
+            `/${article.linktarget.replace(/index\.html$/, '')}`,
+            `/${article.filename}`,
+            `/${article.filename.replace(/index\.html$/, '')}`
+          ].filter(onlyUnique)
     const post_name = postNameFor(article)
     const newUrl = `/${post_name}`
-    return insertIfMissing('wp_redirection_items', { 'url': oldUrl },
-                           effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl)))
-      .then(() => insertIfMissing('wp_redirection_items', { 'url': oldUrlWithoutIndexHtml },
-                                 effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrlWithoutIndexHtml, newUrl))))
+    return Promise.all(oldUrls.map(oldUrl => insertIfMissing('wp_redirection_items', { 'url': oldUrl },
+                                                            effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl)))))
       .then(() => ({
         post_author,
         post_date,
@@ -220,3 +222,6 @@ function insertIfMissing(table, where, insertQuery) {
 }
 
 function identity(x) { return x }
+function onlyUnique(value, index, self) {
+  return self.indexOf(value) === index;
+}
