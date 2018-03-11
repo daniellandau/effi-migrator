@@ -53,17 +53,7 @@ const oldOldAttachments = () => {
         .map(f => f.replace(/^\./, ''))
         .map(f =>
              insertIfMissing('wp_redirection_items', { 'url': f },
-                             effiwp('wp_redirection_items').insert({
-                               url: f,
-                               regex: 0,
-                               position: 0,
-                               group_id: 1,
-                               status: 'enabled',
-                               action_type: 'url',
-                               action_code: 301,
-                               action_data: `/wp-content/uploads${f}`,
-                               match_type: 'url'
-                             })))
+                             effiwp('wp_redirection_items').insert(f, `/wp-content/uploads${f}`)))
 
   return Promise.all(promises)
 }
@@ -200,6 +190,20 @@ function insertUsers(users) {
     return insertIfMissing('wp_users', { 'user_login': user.user_login }, effiwp('wp_users').insert(user))
   })
   return Promise.all(promises)
+}
+
+function makeWpRedirect(src, target) {
+  return {
+    url: src,
+    action_data: target,
+    regex: 0,
+    position: 0,
+    group_id: 1,
+    status: 'enabled',
+    action_type: 'url',
+    action_code: 301,
+    match_type: 'url'
+  }
 }
 
 function insertIfMissing(table, where, insertQuery) {
