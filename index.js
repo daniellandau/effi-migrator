@@ -31,8 +31,9 @@ const oldOldArticles = () => effiweb('articles').select('*').then(articles => {
   })
 })
 
+const cmd = (command) => child_process.execSync(command, { encoding: 'utf8'})
+
 const oldOldAttachments = () => {
-  const cmd = (command) => child_process.execSync(command, { encoding: 'utf8'})
   const uploadsRoot = `${wpRoot}/wp-content/uploads`
   cmd(`mkdir -p ${uploadsRoot}`)
   cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type d -print`).split('\n')
@@ -152,7 +153,8 @@ function articleBody(article) {
           return `${p1}="http://${p2}"`
 
         // Make relatives absolute
-        return `${p1}="/${article.linktarget}/${p2}"`
+        const linkDir = cmd(`dirname ${article.linktarget}`)
+        return `${p1}="/${linkDir}/${p2}"`
       })
     })
     .catch(e => console.log(e) || Promise.resolve(null))
