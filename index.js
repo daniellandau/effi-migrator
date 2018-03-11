@@ -58,10 +58,9 @@ const oldOldAttachments = () => {
   return Promise.all(promises)
 }
 
-// oldOldEffiUsers
-//   .then(oldOldArticles)
-// oldOldArticles()
-oldOldAttachments()
+oldOldEffiUsers
+  .then(oldOldArticles)
+  .then(oldOldAttachments)
   .then(console.log)
 
 function makeWpArticle(article) {
