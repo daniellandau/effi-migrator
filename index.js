@@ -131,7 +131,7 @@ function articleBody(article) {
   console.log(guessedEncoding)
   return readFile(filePath, guessedEncoding)
     .then(contents => contents.split('\n').filter(line => {
-      if (line.includes('<body>')) {
+      if (line.includes('<body')) {
         inBody = true
         return false
       }
