@@ -52,8 +52,8 @@ const oldOldAttachments = () => {
 
 // oldOldEffiUsers
 //   .then(oldOldArticles)
-// oldOldArticles()
-oldOldAttachments()
+oldOldArticles()
+// oldOldAttachments()
   .then(console.log)
 
 function makeWpArticle(article) {
@@ -136,11 +136,30 @@ function articleBody(article) {
 
       return inBody && !inPhp
     }).join('\n'))
+    .then(body => {
+      return body.replace(/(src|href)="([^"]+)"/g, (match, p1, p2) => {
+        if (p2.startsWith('http')
+            || p2.startsWith('/')
+            || p2.startsWith('#')
+            || p2.startsWith('\nhttp')
+            || p2.startsWith('mailto:'))
+          return match
+
+        // Fix broken links
+        if (p2.includes('@effi.org'))
+          return `${p1}="mailto:${p2}"`
+        if (p2.startsWith('www'))
+          return `${p1}="http://${p2}"`
+
+        // Make relatives absolute
+        return `${p1}="/${article.linktarget}/${p2}"`
+      })
+    })
     .catch(e => console.log(e) || Promise.resolve(null))
 }
 
 function articleWpAuthorId(article) {
-  return (article.author ? effiwp('wp_users').select('ID').where('user_login', wpLoginFor(article.author)).then(rows => console.log(rows, article.author)||rows[0].ID) : Promise.resolve(1))
+  return (article.author ? effiwp('wp_users').select('ID').where('user_login', wpLoginFor(article.author)).then(rows => rows[0].ID) : Promise.resolve(1))
 }
 
 function makeWpUser(userName) {
