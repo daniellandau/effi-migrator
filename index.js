@@ -3,6 +3,8 @@ const knex = require('knex')
 const fs = require('fs')
 const util = require('util')
 const child_process = require('child_process')
+const encoding = require('encoding')
+
 const readFile = util.promisify(fs.readFile)
 
 const effiweb = knex(knex_config['effiweb'])
@@ -15,6 +17,86 @@ const wpRoot = process.env.WP_ROOT
 const oldWinstonUsers = efficms('users')
   .then(rows => rows.map(drupalToWpUser))
   .then(users => insertUsers(users).then(updateUsers(users)))
+
+const oldWinstonArticles = () =>
+  efficms('node')
+    .select('*')
+    .then(nodes => Promise.all(nodes.map(handleNode)))
+
+function handleNode(node) {
+  if (node.body.length < 1) return Promise.resolve(null)
+
+  return Promise.all([
+    nodeWpAuthorId(node),
+    efficms('url_alias')
+      .select('dst')
+      .where('src', `node/${node.nid}`)
+  ]).then(([post_author, urls]) => {
+    if (urls.length === 0) return null
+
+    const oldUrls = [].concat
+      .apply(
+        [],
+        urls.map(({ dst }) => [
+          `/${dst}`,
+          `/${dst.replace(/index\.html$/, '')}`
+        ])
+      )
+      .filter(onlyUnique)
+    const post_name = postNameFor({ linktarget: urls[0].dst })
+    const newUrl = `/${post_name}`
+    const urlPromise = Promise.all(
+      oldUrls.map(oldUrl =>
+        insertIfMissing(
+          'wp_redirection_items',
+          { url: oldUrl },
+          effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl))
+        )
+      )
+    )
+
+    const post_date = new Date(node.created * 1000)
+    const post_title = encoding.convert(node.title, 'latin1', 'UTF-8')
+    const post_content = encoding.convert(
+      node.body.replace(new RegExp(`<h.>${node.title}</h.>`), ''),
+      'latin1',
+      'UTF-8'
+    )
+
+    const post_excerpt = encoding.convert(node.teaser, 'latin1', 'UTF-8')
+    const wpArticle = {
+      post_author,
+      post_date,
+      post_content,
+      post_title,
+      post_status: 'publish',
+      post_name,
+      comment_status: 'closed',
+      ping_status: 'open',
+      post_excerpt,
+      post_type: 'post'
+    }
+    return urlPromise.then(() =>
+      insertIfMissing(
+        'wp_posts',
+        { post_title: wpArticle.post_title },
+        effiwp('wp_posts').insert(wpArticle)
+      )
+    )
+  })
+}
+
+function nodeWpAuthorId(node) {
+  return efficms('users')
+    .where({ uid: node.uid })
+    .then(rows => rows[0])
+    .then(user =>
+      effiwp('wp_users')
+        .select('ID')
+        .where('user_login', wpLoginFor(user.name))
+    )
+    .then(rows => rows[0].ID)
+}
 
 function drupalToWpUser(drUser) {
   return {
@@ -87,7 +169,7 @@ const oldOldAttachments = () => {
   return Promise.all(promises)
 }
 
-oldWinstonUsers.then(console.log)
+oldWinstonUsers.then(oldWinstonArticles).then(console.log)
 // oldOldEffiUsers
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)

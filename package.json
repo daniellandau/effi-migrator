@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "encoding": "^0.1.12",
     "knex": "^0.14.4",
     "mysql": "^2.15.0",
     "pg": "^7.4.1"
