@@ -32,7 +32,7 @@ function handleNode(node) {
     efficms('url_alias')
       .select('dst')
       .where('src', `node/${node.nid}`)
-  ]).then(([post_author, urls]) => {
+  ]).then(([post_author_latin, urls]) => {
     if (urls.length === 0) return null
 
     const oldUrls = [].concat
@@ -58,6 +58,7 @@ function handleNode(node) {
 
     const post_date = new Date(node.created * 1000)
     const post_title = encoding.convert(node.title, 'latin1', 'UTF-8')
+    const post_author = encoding.convert(post_author_latin, 'latin1', 'UTF-8')
     const post_content = encoding.convert(
       node.body.replace(new RegExp(`<h.>${node.title}</h.>`), ''),
       'latin1',
