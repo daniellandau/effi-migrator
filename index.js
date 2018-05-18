@@ -12,77 +12,116 @@ const effiwp = knex(knex_config['effiwp'])
 const root = process.env.ARTICLE_ROOT
 const wpRoot = process.env.WP_ROOT
 
-const oldOldEffiUsers = effiweb('articles').distinct('author')
+const oldWinstonUsers = efficms('users')
+  .then(rows => rows.map(drupalToWpUser))
+  .then(users => insertUsers(users).then(updateUsers(users)))
+
+function drupalToWpUser(drUser) {
+  return {
+    user_login: wpLoginFor(drUser.name),
+    user_pass: drUser.pass,
+    user_nicename: wpLoginFor(drUser.name),
+    user_email: drUser.mail,
+    display_name: drUser.name
+  }
+}
+
+const oldOldEffiUsers = effiweb('articles')
+  .distinct('author')
   .then(rows => rows.map(r => r.author))
   .then(authors => authors.filter(x => x))
   .then(authors => authors.map(author => makeWpUser(author)))
   .then(insertUsers)
 
-const oldOldArticles = () => effiweb('articles').select('*').then(articles => {
-  return Promise.all(articles.map(makeWpArticle)).then(wpArticles => {
-    const promises = wpArticles
-          .filter(identity)
-          .map(wpArticle => {
-            return insertIfMissing('wp_posts',
-                            {'post_title': wpArticle.post_title},
-                            effiwp('wp_posts').insert(wpArticle))
-          })
-    return Promise.all(promises)
-  })
-})
+const oldOldArticles = () =>
+  effiweb('articles')
+    .select('*')
+    .then(articles => {
+      return Promise.all(articles.map(makeWpArticle)).then(wpArticles => {
+        const promises = wpArticles.filter(identity).map(wpArticle => {
+          return insertIfMissing(
+            'wp_posts',
+            { post_title: wpArticle.post_title },
+            effiwp('wp_posts').insert(wpArticle)
+          )
+        })
+        return Promise.all(promises)
+      })
+    })
 
-const cmd = (command) => child_process.execSync(command, { encoding: 'utf8'})
+const cmd = command => child_process.execSync(command, { encoding: 'utf8' })
 
 const oldOldAttachments = () => {
   const uploadsRoot = `${wpRoot}/wp-content/uploads`
   cmd(`mkdir -p ${uploadsRoot}`)
-  cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type d -print`).split('\n')
+  cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type d -print`)
+    .split('\n')
     .forEach(d => cmd(`mkdir -p ${uploadsRoot}/${d}`))
-  const promises = cmd(`cd ${root} && find . -path ./meta/lib -prune -or -type f -print`).split('\n')
-        .filter(f => f.length > 0
-                && !f.includes('.htaccess')
-                && !f.endsWith('.html')
-                && !f.endsWith('~')
-                && !f.endsWith('.inc')
-                && !f.endsWith('.php'))
-        .map(f => {
-          console.log(f)
-          // cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`)
-          return f
-        })
-        .map(f => f.replace(/^\./, ''))
-        .map(f =>
-             insertIfMissing('wp_redirection_items', { 'url': f },
-                             effiwp('wp_redirection_items').insert(f, `/wp-content/uploads${f}`)))
+  const promises = cmd(
+    `cd ${root} && find . -path ./meta/lib -prune -or -type f -print`
+  )
+    .split('\n')
+    .filter(
+      f =>
+        f.length > 0 &&
+        !f.includes('.htaccess') &&
+        !f.endsWith('.html') &&
+        !f.endsWith('~') &&
+        !f.endsWith('.inc') &&
+        !f.endsWith('.php')
+    )
+    .map(f => {
+      console.log(f)
+      // cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`)
+      return f
+    })
+    .map(f => f.replace(/^\./, ''))
+    .map(f =>
+      insertIfMissing(
+        'wp_redirection_items',
+        { url: f },
+        effiwp('wp_redirection_items').insert(f, `/wp-content/uploads${f}`)
+      )
+    )
 
   return Promise.all(promises)
 }
 
-oldOldEffiUsers
-  .then(oldOldArticles)
-  .then(oldOldAttachments)
-  .then(console.log)
+oldWinstonUsers.then(console.log)
+// oldOldEffiUsers
+//   .then(oldOldArticles)
+//   .then(oldOldAttachments)
+//   .then(console.log)
 
 function makeWpArticle(article) {
-  return Promise.all([
-    articleWpAuthorId(article),
-    articleBody(article)
-  ]).then(([post_author, post_content]) => {
-    if (!post_content) return null
-    const post_date = article.published || dateFromContent(post_content) || otherDateRules(article)
-    if (!post_date) return null
+  return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
+    ([post_author, post_content]) => {
+      if (!post_content) return null
+      const post_date =
+        article.published ||
+        dateFromContent(post_content) ||
+        otherDateRules(article)
+      if (!post_date) return null
 
-    const oldUrls =
-          [ `/${article.linktarget}`,
-            `/${article.linktarget.replace(/index\.html$/, '')}`,
-            `/${article.filename}`,
-            `/${article.filename.replace(/index\.html$/, '')}`
-          ].filter(onlyUnique)
-    const post_name = postNameFor(article)
-    const newUrl = `/${post_name}`
-    return Promise.all(oldUrls.map(oldUrl => insertIfMissing('wp_redirection_items', { 'url': oldUrl },
-                                                            effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl)))))
-      .then(() => ({
+      const oldUrls = [
+        `/${article.linktarget}`,
+        `/${article.linktarget.replace(/index\.html$/, '')}`,
+        `/${article.filename}`,
+        `/${article.filename.replace(/index\.html$/, '')}`
+      ].filter(onlyUnique)
+      const post_name = postNameFor(article)
+      const newUrl = `/${post_name}`
+      return Promise.all(
+        oldUrls.map(oldUrl =>
+          insertIfMissing(
+            'wp_redirection_items',
+            { url: oldUrl },
+            effiwp('wp_redirection_items').insert(
+              makeWpRedirect(oldUrl, newUrl)
+            )
+          )
+        )
+      ).then(() => ({
         post_author,
         post_date,
         post_content,
@@ -94,7 +133,8 @@ function makeWpArticle(article) {
         post_excerpt: article.summary || '',
         post_type: 'post'
       }))
-  })
+    }
+  )
 }
 
 function otherDateRules(article) {
@@ -113,60 +153,68 @@ function dateFromContent(post_content) {
 function postNameFor(article) {
   return article.linktarget
     .replace(/\//g, '-')
-    .replace('\.html', '')
+    .replace('.html', '')
     .replace(/\./g, '-')
 }
 
 function articleBody(article) {
-  console.log('AAAAA',article.linktarget)
-  if (!article.linktarget.endsWith('.html'))
-    return Promise.resolve(null)
+  console.log('AAAAA', article.linktarget)
+  if (!article.linktarget.endsWith('.html')) return Promise.resolve(null)
   const filePath = `${root}/${article.linktarget}`
-  if (!fs.existsSync(filePath))
-    return Promise.resolve(null)
+  if (!fs.existsSync(filePath)) return Promise.resolve(null)
 
   let inBody = false
   let inPhp = false
-  const fileCommandOutput = child_process.spawnSync('file', [ filePath, '-b' ], { encoding: 'utf8'}).stdout.split(',')[1].split(' ')[1]
-  const guessedEncoding = [ 'ISO-8859', 'Non-ISO' ].includes(fileCommandOutput) ? 'latin1' : fileCommandOutput
+  const fileCommandOutput = child_process
+    .spawnSync('file', [filePath, '-b'], { encoding: 'utf8' })
+    .stdout.split(',')[1]
+    .split(' ')[1]
+  const guessedEncoding = ['ISO-8859', 'Non-ISO'].includes(fileCommandOutput)
+    ? 'latin1'
+    : fileCommandOutput
   console.log(guessedEncoding)
   return readFile(filePath, guessedEncoding)
-    .then(contents => contents.split('\n').filter(line => {
-      if (line.includes('<body')) {
-        inBody = true
-        return false
-      }
-      if (line.includes('</body>')) {
-        inBody = false
-        return false
-      }
-      if (line.includes('<?')) {
-        inPhp = true
-        return false
-      }
-      if (line.includes('?>')) {
-        inPhp = false
-        return false
-      }
-      if (line.search(new RegExp(`<h.*${article.title}`)) !== -1)
-        return false
+    .then(contents =>
+      contents
+        .split('\n')
+        .filter(line => {
+          if (line.includes('<body')) {
+            inBody = true
+            return false
+          }
+          if (line.includes('</body>')) {
+            inBody = false
+            return false
+          }
+          if (line.includes('<?')) {
+            inPhp = true
+            return false
+          }
+          if (line.includes('?>')) {
+            inPhp = false
+            return false
+          }
+          if (line.search(new RegExp(`<h.*${article.title}`)) !== -1)
+            return false
 
-      return inBody && !inPhp
-    }).join('\n'))
+          return inBody && !inPhp
+        })
+        .join('\n')
+    )
     .then(body => {
       return body.replace(/(src|href)="([^"]+)"/g, (match, p1, p2) => {
-        if (p2.startsWith('http')
-            || p2.startsWith('/')
-            || p2.startsWith('#')
-            || p2.startsWith('\nhttp')
-            || p2.startsWith('mailto:'))
+        if (
+          p2.startsWith('http') ||
+          p2.startsWith('/') ||
+          p2.startsWith('#') ||
+          p2.startsWith('\nhttp') ||
+          p2.startsWith('mailto:')
+        )
           return match
 
         // Fix broken links
-        if (p2.includes('@effi.org'))
-          return `${p1}="mailto:${p2}"`
-        if (p2.startsWith('www'))
-          return `${p1}="http://${p2}"`
+        if (p2.includes('@effi.org')) return `${p1}="mailto:${p2}"`
+        if (p2.startsWith('www')) return `${p1}="http://${p2}"`
 
         // Make relatives absolute
         const linkDir = cmd(`dirname ${article.linktarget}`)
@@ -177,7 +225,12 @@ function articleBody(article) {
 }
 
 function articleWpAuthorId(article) {
-  return (article.author ? effiwp('wp_users').select('ID').where('user_login', wpLoginFor(article.author)).then(rows => rows[0].ID) : Promise.resolve(1))
+  return article.author
+    ? effiwp('wp_users')
+        .select('ID')
+        .where('user_login', wpLoginFor(article.author))
+        .then(rows => rows[0].ID)
+    : Promise.resolve(1)
 }
 
 function makeWpUser(userName) {
@@ -196,7 +249,20 @@ function wpLoginFor(userName) {
 
 function insertUsers(users) {
   const promises = users.map(user => {
-    return insertIfMissing('wp_users', { 'user_login': user.user_login }, effiwp('wp_users').insert(user))
+    return insertIfMissing(
+      'wp_users',
+      { user_login: user.user_login },
+      effiwp('wp_users').insert(user)
+    )
+  })
+  return Promise.all(promises)
+}
+
+function updateUsers(users) {
+  const promises = users.map(user => {
+    return effiwp('wp_users')
+      .where({ user_login: user.user_login })
+      .update(user)
   })
   return Promise.all(promises)
 }
@@ -216,11 +282,14 @@ function makeWpRedirect(src, target) {
 }
 
 function insertIfMissing(table, where, insertQuery) {
-  return effiwp(table).where(where)
-    .then(rows => rows.length === 0 ? insertQuery : null)
+  return effiwp(table)
+    .where(where)
+    .then(rows => (rows.length === 0 ? insertQuery : null))
 }
 
-function identity(x) { return x }
+function identity(x) {
+  return x
+}
 function onlyUnique(value, index, self) {
-  return self.indexOf(value) === index;
+  return self.indexOf(value) === index
 }
