@@ -13,6 +13,7 @@ const effiwp = knex(knex_config['effiwp'])
 
 const root = process.env.ARTICLE_ROOT
 const wpRoot = process.env.WP_ROOT
+const drupalRoot = process.env.DRUPAL_ROOT
 
 const oldWinstonUsers = efficms('users')
   .then(rows => rows.map(drupalToWpUser))
@@ -154,7 +155,7 @@ const oldOldAttachments = () => {
     )
     .map(f => {
       console.log(f)
-      // cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`)
+      cmd(`cp "${root}/${f}" "${uploadsRoot}/${f}"`)
       return f
     })
     .map(f => f.replace(/^\./, ''))
@@ -162,14 +163,54 @@ const oldOldAttachments = () => {
       insertIfMissing(
         'wp_redirection_items',
         { url: f },
-        effiwp('wp_redirection_items').insert(f, `/wp-content/uploads${f}`)
+        effiwp('wp_redirection_items').insert(
+          makeWpRedirect(f, `/wp-content/uploads${f}`)
+        )
       )
     )
 
   return Promise.all(promises)
 }
 
-oldWinstonUsers.then(oldWinstonArticles).then(console.log)
+const oldWinstonFiles = () => {
+  const uploadsRoot = `${wpRoot}/wp-content/uploads`
+  cmd(`mkdir -p ${uploadsRoot}`)
+  const promises = cmd(`cd ${drupalRoot}/files && find . -type f -print`)
+    .split('\n')
+    .filter(
+      f =>
+        f.length > 0 &&
+        !f.includes('.htaccess') &&
+        !f.endsWith('.html') &&
+        !f.endsWith('~') &&
+        !f.endsWith('.inc') &&
+        !f.endsWith('.php')
+    )
+    .map(f => {
+      // console.log(f)
+      cmd(`cp "${drupalRoot}/files/${f}" "${uploadsRoot}/${f}"`)
+      return f
+    })
+    .map(f => f.replace(/^\.\//, ''))
+    .map(f =>
+      insertIfMissing(
+        'wp_redirection_items',
+        { url: f },
+        effiwp('wp_redirection_items').insert(
+          makeWpRedirect(
+            `.*system\\/files\\?file=${f}`,
+            `/wp-content/uploads/${f}`,
+            { regex: 1 }
+          )
+        )
+      )
+    )
+
+  return Promise.all(promises)
+}
+
+// oldWinstonUsers.then(oldWinstonArticles).then(console.log)
+oldWinstonUsers.then(oldWinstonFiles).then(console.log)
 // oldOldEffiUsers
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
@@ -349,11 +390,13 @@ function updateUsers(users) {
   return Promise.all(promises)
 }
 
-function makeWpRedirect(src, target) {
+function makeWpRedirect(src, target, optsIn) {
+  const opts = optsIn || {}
+  const regex = opts.regex || 0
   return {
     url: src,
     action_data: target,
-    regex: 0,
+    regex,
     position: 0,
     group_id: 1,
     status: 'enabled',
