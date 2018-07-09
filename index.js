@@ -221,7 +221,8 @@ const oldOldSpecificArticles = () => {
       const post_name = postNameForLinktarget(linktarget)
       const wpArticle = {
         post_author: 1,
-        post_date: dateFromContent(body) || new Date(),
+        post_date:
+          dateFromContent(body) || otherDateRules(linktarget) || new Date(),
         post_content: body,
         post_title: title,
         post_status: 'publish',
@@ -294,7 +295,7 @@ function makeWpArticle(article) {
       const post_date =
         article.published ||
         dateFromContent(post_content) ||
-        otherDateRules(article)
+        otherDateRules(article.linktarget)
       if (!post_date) return null
 
       const oldUrls = [
@@ -331,9 +332,11 @@ function makeWpArticle(article) {
   )
 }
 
-function otherDateRules(article) {
-  if (article.linktarget.endsWith('toimintasuunnitelma-2003.html'))
+function otherDateRules(linktarget) {
+  if (linktarget.endsWith('toimintasuunnitelma-2003.html'))
     return new Date(2003, 5, 13)
+  if (linktarget.endsWith('tekijanoikeus/aanitteet'))
+    return new Date(2005, 12, 20)
   return null
 }
 
