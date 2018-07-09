@@ -211,10 +211,7 @@ const oldWinstonFiles = () => {
 }
 
 const oldOldSpecificArticles = () => {
-  const linktargets = [
-    'tekijanoikeus/aanitteet',
-    'julkaisut/tiedotteet/lehdistotiedote-2002-12-18.html'
-  ]
+  const linktargets = ['tekijanoikeus/aanitteet']
 
   const promises = linktargets.map(linktarget => {
     articleRead(linktarget).then(({ body, title }) => {
