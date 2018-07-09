@@ -375,6 +375,7 @@ function articleRead(linktargetIn) {
   return readFile(filePath, guessedEncoding)
     .then(contents => {
       const title = guessTitle(contents)
+      console.log('title', title)
       const body = fixLinks(
         bodyWithoutHeadAndTitleAndPhp(contents, title),
         linktarget
