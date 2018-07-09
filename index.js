@@ -256,12 +256,36 @@ const oldOldSpecificArticles = () => {
   return Promise.all(promises)
 }
 
+const oldOldExplicitRedirects = () => {
+  const filePath = `${root}/meta/redirections.inc`
+  const guessedEncoding = guessFileEncoding(filePath)
+  return readFile(filePath, guessedEncoding).then(contents => {
+    const promises = contents
+      .split('\n')
+      .filter(line => line.includes('=>'))
+      .map(line => {
+        const matches = /"(.*)".*"(.*)"/.exec(line)
+
+        return insertIfMissing(
+          'wp_redirection_items',
+          { url: matches[1] },
+          effiwp('wp_redirection_items').insert(
+            makeWpRedirect(matches[1], `/${matches[2]}`)
+          )
+        )
+      })
+    return Promise.all(promises)
+  })
+}
+
 // oldWinstonUsers.then(oldWinstonArticles).then(console.log)
 // oldWinstonUsers.then(oldWinstonFiles).then(console.log)
 // oldOldEffiUsers
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
-oldOldSpecificArticles().then(console.log)
+oldOldSpecificArticles()
+  .then(oldOldExplicitRedirects)
+  .then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
