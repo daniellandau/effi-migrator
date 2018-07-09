@@ -211,7 +211,18 @@ const oldWinstonFiles = () => {
 }
 
 const oldOldSpecificArticles = () => {
-  const linktargets = ['tekijanoikeus/aanitteet']
+  const linktargets = [
+    'tekijanoikeus/aanitteet',
+    'tekijanoikeus/muut',
+    'roskaposti',
+    'mirrors/etvi',
+    'yhdistys/kokoukset',
+    'tapahtumat',
+    'yhdistys/aktivistit-lista.html',
+    'verkossa/linkit.html',
+    'yhdistys/palaute',
+    'yhdistys/palaute/osoitteenmuutos.html'
+  ]
 
   const promises = linktargets.map(linktarget => {
     articleRead(linktarget).then(({ body, title }) => {
