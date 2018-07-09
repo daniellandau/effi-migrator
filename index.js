@@ -509,7 +509,8 @@ function fixLinks(body, linktarget) {
       p2.startsWith('/') ||
       p2.startsWith('#') ||
       p2.startsWith('\nhttp') ||
-      p2.startsWith('mailto:')
+      p2.startsWith('mailto:') ||
+      p2.startsWith('news:')
     )
       return match
 
