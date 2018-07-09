@@ -232,16 +232,20 @@ const oldOldSpecificArticles = () => {
       const oldUrls = linktarget.endsWith('.html')
         ? [`/${linktarget}`]
         : [`/${linktarget}`, `/${linktarget}/`]
-      Promise.all(
-        oldUrls.map(oldUrl =>
-          insertIfMissing(
-            'wp_redirection_items',
-            { url: oldUrl },
-            effiwp('wp_redirection_items').insert(
-              makeWpRedirect(oldUrl, `/${post_name}`)
+      const newUrl = `/${post_name}`
+      ;(oldUrls.includes(newUrl)
+        ? Promise.resolve(null)
+        : Promise.all(
+            oldUrls.map(oldUrl =>
+              insertIfMissing(
+                'wp_redirection_items',
+                { url: oldUrl },
+                effiwp('wp_redirection_items').insert(
+                  makeWpRedirect(oldUrl, newUrl)
+                )
+              )
             )
           )
-        )
       ).then(() =>
         insertIfMissing(
           'wp_posts',
