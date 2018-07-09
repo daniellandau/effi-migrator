@@ -484,6 +484,9 @@ function bodyWithoutHeadAndTitleAndPhp(contents, title) {
         inBody = false
         return false
       }
+      if (line.includes('<?') && line.includes('?>')) {
+        return false
+      }
       if (line.includes('<?')) {
         inPhp = true
         return false
