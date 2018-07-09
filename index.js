@@ -210,12 +210,58 @@ const oldWinstonFiles = () => {
   return Promise.all(promises)
 }
 
+const oldOldSpecificArticles = () => {
+  const linktargets = [
+    'tekijanoikeus/aanitteet',
+    'julkaisut/tiedotteet/lehdistotiedote-2002-12-18.html'
+  ]
+
+  const promises = linktargets.map(linktarget => {
+    articleRead(linktarget).then(({ body, title }) => {
+      const post_name = postNameForLinktarget(linktarget)
+      const wpArticle = {
+        post_author: 1,
+        post_date: dateFromContent(body) || new Date(),
+        post_content: body,
+        post_title: title,
+        post_status: 'publish',
+        post_name,
+        comment_status: 'closed',
+        ping_status: 'open',
+        post_excerpt: '',
+        post_type: 'post'
+      }
+      const oldUrls = linktarget.endsWith('.html')
+        ? [`/${linktarget}`]
+        : [`/${linktarget}`, `/${linktarget}/`]
+      Promise.all(
+        oldUrls.map(oldUrl =>
+          insertIfMissing(
+            'wp_redirection_items',
+            { url: oldUrl },
+            effiwp('wp_redirection_items').insert(
+              makeWpRedirect(oldUrl, `/${post_name}`)
+            )
+          )
+        )
+      ).then(() =>
+        insertIfMissing(
+          'wp_posts',
+          { post_title: wpArticle.post_title },
+          effiwp('wp_posts').insert(wpArticle)
+        )
+      )
+    })
+  })
+  return Promise.all(promises)
+}
+
 // oldWinstonUsers.then(oldWinstonArticles).then(console.log)
-oldWinstonUsers.then(oldWinstonFiles).then(console.log)
+// oldWinstonUsers.then(oldWinstonFiles).then(console.log)
 // oldOldEffiUsers
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
-//   .then(console.log)
+oldOldSpecificArticles().then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
@@ -275,10 +321,39 @@ function dateFromContent(post_content) {
 }
 
 function postNameFor(article) {
-  return article.linktarget
+  return postNameForLinktarget(article.linktarget)
+}
+
+function postNameForLinktarget(linktarget) {
+  return linktarget
     .replace(/\//g, '-')
     .replace('.html', '')
     .replace(/\./g, '-')
+}
+
+function articleRead(linktargetIn) {
+  const linktarget = linktargetIn.endsWith('.html')
+    ? linktargetIn
+    : linktargetIn.endsWith('/')
+      ? `${linktargetIn}index.html`
+      : `${linktargetIn}/index.html`
+  const filePath = `${root}/${linktarget}`
+  if (!fs.existsSync(filePath)) {
+    console.error(`File path ${filePath} doesn't exist!!`)
+    return Promise.resolve(null)
+  }
+
+  const guessedEncoding = guessFileEncoding(filePath)
+  return readFile(filePath, guessedEncoding)
+    .then(contents => {
+      const title = guessTitle(contents)
+      const body = fixLinks(
+        bodyWithoutHeadAndTitleAndPhp(contents, title),
+        linktarget
+      )
+      return { body, title }
+    })
+    .catch(e => console.error(e) || Promise.resolve(null))
 }
 
 function articleBody(article) {
@@ -287,64 +362,11 @@ function articleBody(article) {
   const filePath = `${root}/${article.linktarget}`
   if (!fs.existsSync(filePath)) return Promise.resolve(null)
 
-  let inBody = false
-  let inPhp = false
-  const fileCommandOutput = child_process
-    .spawnSync('file', [filePath, '-b'], { encoding: 'utf8' })
-    .stdout.split(',')[1]
-    .split(' ')[1]
-  const guessedEncoding = ['ISO-8859', 'Non-ISO'].includes(fileCommandOutput)
-    ? 'latin1'
-    : fileCommandOutput
+  const guessedEncoding = guessFileEncoding(filePath)
   console.log(guessedEncoding)
   return readFile(filePath, guessedEncoding)
-    .then(contents =>
-      contents
-        .split('\n')
-        .filter(line => {
-          if (line.includes('<body')) {
-            inBody = true
-            return false
-          }
-          if (line.includes('</body>')) {
-            inBody = false
-            return false
-          }
-          if (line.includes('<?')) {
-            inPhp = true
-            return false
-          }
-          if (line.includes('?>')) {
-            inPhp = false
-            return false
-          }
-          if (line.search(new RegExp(`<h.*${article.title}`)) !== -1)
-            return false
-
-          return inBody && !inPhp
-        })
-        .join('\n')
-    )
-    .then(body => {
-      return body.replace(/(src|href)="([^"]+)"/g, (match, p1, p2) => {
-        if (
-          p2.startsWith('http') ||
-          p2.startsWith('/') ||
-          p2.startsWith('#') ||
-          p2.startsWith('\nhttp') ||
-          p2.startsWith('mailto:')
-        )
-          return match
-
-        // Fix broken links
-        if (p2.includes('@effi.org')) return `${p1}="mailto:${p2}"`
-        if (p2.startsWith('www')) return `${p1}="http://${p2}"`
-
-        // Make relatives absolute
-        const linkDir = cmd(`dirname ${article.linktarget}`)
-        return `${p1}="/${linkDir}/${p2}"`
-      })
-    })
+    .then(contents => bodyWithoutHeadAndTitleAndPhp(contents, article.title))
+    .then(body => fixLinks(body, article.linktarget))
     .catch(e => console.log(e) || Promise.resolve(null))
 }
 
@@ -418,4 +440,73 @@ function identity(x) {
 }
 function onlyUnique(value, index, self) {
   return self.indexOf(value) === index
+}
+
+function bodyWithoutHeadAndTitleAndPhp(contents, title) {
+  let inBody = false
+  let inPhp = false
+  return contents
+    .split('\n')
+    .filter(line => {
+      if (line.includes('<body')) {
+        inBody = true
+        return false
+      }
+      if (line.includes('</body>')) {
+        inBody = false
+        return false
+      }
+      if (line.includes('<?')) {
+        inPhp = true
+        return false
+      }
+      if (line.includes('?>')) {
+        inPhp = false
+        return false
+      }
+      if (title && line.search(new RegExp(`<h.*${title}`)) !== -1) return false
+
+      return inBody && !inPhp
+    })
+    .join('\n')
+}
+
+function fixLinks(body, linktarget) {
+  return body.replace(/(src|href)="([^"]+)"/g, (match, p1, p2) => {
+    if (
+      p2.startsWith('http') ||
+      p2.startsWith('/') ||
+      p2.startsWith('#') ||
+      p2.startsWith('\nhttp') ||
+      p2.startsWith('mailto:')
+    )
+      return match
+
+    // Fix broken links
+    if (p2.includes('@effi.org')) return `${p1}="mailto:${p2}"`
+    if (p2.startsWith('www')) return `${p1}="http://${p2}"`
+
+    // Make relatives absolute
+    const linkDir = cmd(`dirname ${linktarget}`)
+    return `${p1}="/${linkDir}/${p2}"`
+  })
+}
+
+function guessFileEncoding(filePath) {
+  const fileCommandOutput = child_process
+    .spawnSync('file', [filePath, '-b'], { encoding: 'utf8' })
+    .stdout.split(',')[1]
+    .split(' ')[1]
+  const guessedEncoding = ['ISO-8859', 'Non-ISO'].includes(fileCommandOutput)
+    ? 'latin1'
+    : fileCommandOutput
+  return guessedEncoding
+}
+
+function guessTitle(contents) {
+  const titleMatch = /<title>\s*(.*)\s*<\/title>/.exec(contents)
+  const h1Match = /<h1>\s*(.*)\s*<\/h1>/.exec(contents)
+  if (titleMatch) return titleMatch[1]
+  if (h1Match) return h1Match[1]
+  return null
 }
