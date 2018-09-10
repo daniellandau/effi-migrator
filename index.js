@@ -291,14 +291,30 @@ const oldOldExplicitRedirects = () => {
   })
 }
 
+const feedRedirects = () => {
+  const oldNames = [
+    '/xml/uutiset.rss',
+    '/xml/effiorg.rss',
+    '/xml/uutiset-latin1.rss',
+    '/xml/effiorg-latin1.rss'
+  ]
+  return Promise.all(
+    oldNames.map(oldName =>
+      effiwp('wp_redirection_items')
+        .where({ url: oldName })
+        .update(makeWpRedirect(oldName, '/feed/'))
+    )
+  )
+}
+
 // oldWinstonUsers.then(oldWinstonArticles).then(console.log)
 // oldWinstonUsers.then(oldWinstonFiles).then(console.log)
 // oldOldEffiUsers
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
-oldOldSpecificArticles()
-  .then(oldOldExplicitRedirects)
-  .then(console.log)
+// oldOldSpecificArticles()
+//   .then(oldOldExplicitRedirects)
+feedRedirects().then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
