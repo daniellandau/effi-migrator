@@ -291,6 +291,117 @@ const oldOldExplicitRedirects = () => {
   })
 }
 
+const oldOldCategories = () => {
+  const categories = {
+    'julkaisut/kirjeet': 'Kirjeet',
+    'julkaisut/puheet': 'Puheet',
+    'roskaposti/': 'Roskaposti',
+    'tekijanoikeus/muut/': 'Tekijänoikeus, muut',
+    'tekijanoikeus/aanitteet/': 'Tekijänoikeus, äänitteet',
+    'blog/': 'Blogi',
+    'yhdistys/kokoukset/': 'Kokoukset',
+    'yhdistys/toimintasuunnitelmat/': 'Toimintasuunnitelmat',
+    'tapahtumat/': 'Tapahtumat',
+    effialert: 'Effialert'
+  }
+
+  function categoryForArticle(article) {
+    const key = Object.keys(categories).find(category =>
+      article.filename.startsWith(category)
+    )
+    if (key) return categories[key]
+    return 'Yleinen'
+  }
+  return Promise.all(
+    Object.values(categories).map(category => {
+      return insertIfMissing(
+        'wp_terms',
+        { name: category },
+        effiwp('wp_terms').insert({
+          name: category,
+          slug: category.replace(', ', '-').toLowerCase(),
+          term_group: 0
+        })
+      )
+    })
+  )
+    .then(() => {
+      return Promise.all(
+        Object.values(categories).map(category => {
+          return effiwp('wp_terms')
+            .select('term_id')
+            .where('name', category)
+            .then(rows => rows[0].term_id)
+            .then(term_id => {
+              return insertIfMissing(
+                'wp_term_taxonomy',
+                { term_id },
+                effiwp('wp_term_taxonomy').insert({
+                  term_id,
+                  taxonomy: 'category',
+                  description: category
+                })
+              )
+            })
+        })
+      )
+    })
+    .then(() => {
+      return effiweb('articles')
+        .select('*')
+        .then(articles => {
+          return Promise.all(
+            articles.map(article => {
+              return effiwp('wp_posts')
+                .select('ID')
+                .where('post_title', article.title)
+                .then(rows => rows.length > 0 && rows[0].ID)
+                .then(post_id => {
+                  return (
+                    post_id &&
+                    effiwp('wp_terms')
+                      .select('term_id')
+                      .where('name', categoryForArticle(article))
+                      .then(rows => rows[0].term_id)
+                      .then(term_id =>
+                        effiwp('wp_term_taxonomy')
+                          .select('term_taxonomy_id')
+                          .where('term_id', term_id)
+                          .then(rows => rows[0].term_taxonomy_id)
+                      )
+                      .then(term_taxonomy_id => {
+                        return insertIfMissing(
+                          'wp_term_relationships',
+                          { object_id: post_id, term_taxonomy_id },
+                          effiwp('wp_term_relationships').insert({
+                            object_id: post_id,
+                            term_taxonomy_id
+                          })
+                        )
+                      })
+                  )
+                })
+            })
+          )
+        })
+    })
+    .then(() => {
+      // https://stackoverflow.com/questions/18669256/how-to-update-wordpress-taxonomiescategories-tags-count-field-after-bulk-impo#18669257
+      return effiwp.raw(`
+UPDATE wp_term_taxonomy SET count = (
+SELECT COUNT(*) FROM wp_term_relationships rel
+    LEFT JOIN wp_posts po ON (po.ID = rel.object_id)
+    WHERE
+        rel.term_taxonomy_id = wp_term_taxonomy.term_taxonomy_id
+        AND
+        wp_term_taxonomy.taxonomy NOT IN ('link_category')
+        AND
+        po.post_status IN ('publish', 'future')
+)
+`)
+    })
+}
+
 const feedRedirects = () => {
   const oldNames = [
     '/xml/uutiset.rss',
@@ -314,7 +425,8 @@ const feedRedirects = () => {
 //   .then(oldOldAttachments)
 // oldOldSpecificArticles()
 //   .then(oldOldExplicitRedirects)
-feedRedirects().then(console.log)
+// feedRedirects().then(console.log)
+oldOldCategories().then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
