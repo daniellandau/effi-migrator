@@ -291,27 +291,95 @@ const oldOldExplicitRedirects = () => {
   })
 }
 
-const oldOldCategories = () => {
-  const categories = {
-    'julkaisut/kirjeet': 'Kirjeet',
-    'julkaisut/puheet': 'Puheet',
-    'roskaposti/': 'Roskaposti',
-    'tekijanoikeus/muut/': 'Tekijänoikeus, muut',
-    'tekijanoikeus/aanitteet/': 'Tekijänoikeus, äänitteet',
-    'blog/': 'Blogi',
-    'yhdistys/kokoukset/': 'Kokoukset',
-    'yhdistys/toimintasuunnitelmat/': 'Toimintasuunnitelmat',
-    'tapahtumat/': 'Tapahtumat',
-    effialert: 'Effialert'
-  }
+const categories = {
+  'julkaisut/kirjeet': 'Kirjeet',
+  'julkaisut/puheet': 'Puheet',
+  'roskaposti/': 'Roskaposti',
+  'tekijanoikeus/muut/': 'Tekijänoikeus, muut',
+  'tekijanoikeus/aanitteet/': 'Tekijänoikeus, äänitteet',
+  'blog/': 'Blogi',
+  'yhdistys/kokoukset/': 'Kokoukset',
+  'yhdistys/toimintasuunnitelmat/': 'Toimintasuunnitelmat',
+  'tapahtumat/': 'Tapahtumat',
+  effialert: 'Effialert'
+}
 
-  function categoryForArticle(article) {
-    const key = Object.keys(categories).find(category =>
-      article.filename.startsWith(category)
+function categoryForArticle(article) {
+  const key = Object.keys(categories).find(category =>
+    article.filename.startsWith(category)
+  )
+  if (key) return categories[key]
+  return 'Yleinen'
+}
+
+const oldWinstonCategories = () => {
+  return efficms('node')
+    .select('*')
+    .then(nodes =>
+      Promise.all(
+        nodes.map(node => {
+          if (node.body.length < 1) return Promise.resolve(null)
+          return efficms('url_alias')
+            .select('dst')
+            .where('src', `node/${node.nid}`)
+            .then(rows => rows.length > 0 && rows[0].dst)
+            .then(url => {
+              return (
+                url &&
+                effiwp('wp_terms')
+                  .select('term_id')
+                  .where('name', categoryForArticle({ filename: url }))
+                  .then(rows => rows[0].term_id)
+                  .then(term_id =>
+                    effiwp('wp_term_taxonomy')
+                      .select('term_taxonomy_id')
+                      .where('term_id', term_id)
+                      .then(rows => rows[0].term_taxonomy_id)
+                  )
+                  .then(term_taxonomy_id => {
+                    const post_title = encoding.convert(
+                      node.title,
+                      'latin1',
+                      'UTF-8'
+                    )
+                    return effiwp('wp_posts')
+                      .select('ID')
+                      .where('post_title', post_title)
+                      .then(rows => rows[0].ID)
+                      .then(post_id => {
+                        return insertIfMissing(
+                          'wp_term_relationships',
+                          { object_id: post_id, term_taxonomy_id },
+                          effiwp('wp_term_relationships').insert({
+                            object_id: post_id,
+                            term_taxonomy_id
+                          })
+                        )
+                      })
+                  })
+              )
+            })
+        })
+      )
     )
-    if (key) return categories[key]
-    return 'Yleinen'
-  }
+    .then(() => {
+      // https://stackoverflow.com/questions/18669256/how-to-update-wordpress-taxonomiescategories-tags-count-field-after-bulk-impo#18669257
+      return effiwp.raw(`
+  UPDATE wp_term_taxonomy SET count = (
+  SELECT COUNT(*) FROM wp_term_relationships rel
+      LEFT JOIN wp_posts po ON (po.ID = rel.object_id)
+      WHERE
+          rel.term_taxonomy_id = wp_term_taxonomy.term_taxonomy_id
+          AND
+          wp_term_taxonomy.taxonomy NOT IN ('link_category')
+          AND
+          po.post_status IN ('publish', 'future')
+  )
+  `)
+    })
+}
+
+const oldOldCategories = () => {
   return Promise.all(
     Object.values(categories).map(category => {
       return insertIfMissing(
@@ -426,7 +494,8 @@ const feedRedirects = () => {
 // oldOldSpecificArticles()
 //   .then(oldOldExplicitRedirects)
 // feedRedirects().then(console.log)
-oldOldCategories().then(console.log)
+// oldOldCategories().then(console.log)
+oldWinstonCategories().then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
