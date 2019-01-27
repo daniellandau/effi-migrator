@@ -4,7 +4,7 @@ module.exports = {
     client: 'postgresql',
     connection: {
       host: 'localhost',
-      port: 5431,
+      port: 5432,
       database: 'effiweb',
       user:     'effiweb',
       password: process.env.EFFIWEB_PASSWORD
@@ -19,7 +19,7 @@ module.exports = {
     client: 'postgresql',
     connection: {
       host: 'localhost',
-      port: 5431,
+      port: 5432,
       database: 'efficms',
       user: 'effiweb',
       password: process.env.EFFIWEB_PASSWORD
@@ -33,7 +33,7 @@ module.exports = {
   effiwp: {
     client: 'mysql',
     connection: {
-      database: 'effiwp',
+      database: 'wordpress',
       user:     'effiwp',
       password: process.env.EFFIWP_PASSWORD
     },
