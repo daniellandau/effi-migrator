@@ -33,6 +33,7 @@ function handleNode(node) {
       .select('dst')
       .where('src', `node/${node.nid}`)
   ]).then(([post_author_latin, urls]) => {
+    console.log('latin', post_author_latin)
     if (urls.length === 0) return null
 
     const oldUrls = [].concat
@@ -48,17 +49,18 @@ function handleNode(node) {
     const newUrl = `/${post_name}`
     const urlPromise = Promise.all(
       oldUrls.map(oldUrl =>
-        insertIfMissing(
+        upsert(
           'wp_redirection_items',
           { url: oldUrl },
-          effiwp('wp_redirection_items').insert(makeWpRedirect(oldUrl, newUrl))
+          makeWpRedirect(oldUrl, newUrl)
         )
       )
     )
 
     const post_date = new Date(node.created * 1000)
     const post_title = encoding.convert(node.title, 'latin1', 'UTF-8')
-    const post_author = encoding.convert(post_author_latin, 'latin1', 'UTF-8')
+    const post_author = post_author_latin // encoding.convert(post_author_latin, 'latin1', 'UTF-8')
+    console.log('post', post_author)
     const post_content = encoding.convert(
       node.body.replace(new RegExp(`<h.>${node.title}</h.>`), ''),
       'latin1',
@@ -69,6 +71,12 @@ function handleNode(node) {
     const wpArticle = {
       post_author,
       post_date,
+      post_date_gmt: post_date,
+      post_modified: post_date,
+      post_modified_gmt: post_date,
+      to_ping: '',
+      pinged: '',
+      post_content_filtered: '',
       post_content,
       post_title,
       post_status: 'publish',
@@ -79,11 +87,7 @@ function handleNode(node) {
       post_type: 'post'
     }
     return urlPromise.then(() =>
-      insertIfMissing(
-        'wp_posts',
-        { post_title: wpArticle.post_title },
-        effiwp('wp_posts').insert(wpArticle)
-      )
+      upsert('wp_posts', { post_title: wpArticle.post_title }, wpArticle)
     )
   })
 }
@@ -106,16 +110,18 @@ function drupalToWpUser(drUser) {
     user_pass: drUser.pass,
     user_nicename: wpLoginFor(drUser.name),
     user_email: drUser.mail,
+    user_registered: new Date(),
     display_name: drUser.name
   }
 }
 
-const oldOldEffiUsers = effiweb('articles')
-  .distinct('author')
-  .then(rows => rows.map(r => r.author))
-  .then(authors => authors.filter(x => x))
-  .then(authors => authors.map(author => makeWpUser(author)))
-  .then(insertUsers)
+const oldOldEffiUsers = () =>
+  effiweb('articles')
+    .distinct('author')
+    .then(rows => rows.map(r => r.author))
+    .then(authors => authors.filter(x => x))
+    .then(authors => authors.map(author => makeWpUser(author)))
+    .then(insertUsers)
 
 const oldOldArticles = () =>
   effiweb('articles')
@@ -221,16 +227,24 @@ const oldOldSpecificArticles = () => {
     'yhdistys/aktivistit-lista.html',
     'verkossa/linkit.html',
     'yhdistys/palaute',
-    'yhdistys/palaute/osoitteenmuutos.html'
+    'yhdistys/palaute/osoitteenmuutos.html',
+    'yhdistys/rekisteriseloste.html'
   ]
 
   const promises = linktargets.map(linktarget => {
     articleRead(linktarget).then(({ body, title }) => {
       const post_name = postNameForLinktarget(linktarget)
+      let post_date =
+        dateFromContent(body) || otherDateRules(linktarget) || new Date()
       const wpArticle = {
         post_author: 1,
-        post_date:
-          dateFromContent(body) || otherDateRules(linktarget) || new Date(),
+        post_date,
+        post_date_gmt: post_date,
+        post_modified: post_date,
+        post_modified_gmt: post_date,
+        to_ping: '',
+        pinged: '',
+        post_content_filtered: '',
         post_content: body,
         post_title: title,
         post_status: 'publish',
@@ -260,7 +274,7 @@ const oldOldSpecificArticles = () => {
       ).then(() =>
         insertIfMissing(
           'wp_posts',
-          { post_title: wpArticle.post_title },
+          { post_name: wpArticle.post_name },
           effiwp('wp_posts').insert(wpArticle)
         )
       )
@@ -486,16 +500,16 @@ const feedRedirects = () => {
   )
 }
 
-// oldWinstonUsers.then(oldWinstonArticles).then(console.log)
+oldWinstonUsers.then(oldWinstonArticles).then(console.log)
 // oldWinstonUsers.then(oldWinstonFiles).then(console.log)
-// oldOldEffiUsers
+// oldOldEffiUsers()
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
-// oldOldSpecificArticles()
+// oldOldSpecificArticles().then(console.log)
 //   .then(oldOldExplicitRedirects)
 // feedRedirects().then(console.log)
 // oldOldCategories().then(console.log)
-oldWinstonCategories().then(console.log)
+// oldWinstonCategories().then(console.log)
 
 function makeWpArticle(article) {
   return Promise.all([articleWpAuthorId(article), articleBody(article)]).then(
@@ -517,17 +531,19 @@ function makeWpArticle(article) {
       const newUrl = `/${post_name}`
       return Promise.all(
         oldUrls.map(oldUrl =>
-          insertIfMissing(
+          upsert(
             'wp_redirection_items',
             { url: oldUrl },
-            effiwp('wp_redirection_items').insert(
-              makeWpRedirect(oldUrl, newUrl)
-            )
+            makeWpRedirect(oldUrl, newUrl)
           )
         )
       ).then(() => ({
         post_author,
         post_date,
+        post_date_gmt: post_date,
+        post_modified: post_date,
+        post_modified_gmt: post_date,
+        to_ping: '',
         post_content,
         post_title: article.title,
         post_status: 'publish',
@@ -571,8 +587,8 @@ function articleRead(linktargetIn) {
   const linktarget = linktargetIn.endsWith('.html')
     ? linktargetIn
     : linktargetIn.endsWith('/')
-      ? `${linktargetIn}index.html`
-      : `${linktargetIn}/index.html`
+    ? `${linktargetIn}index.html`
+    : `${linktargetIn}/index.html`
   const filePath = `${root}/${linktarget}`
   if (!fs.existsSync(filePath)) {
     console.error(`File path ${filePath} doesn't exist!!`)
@@ -622,6 +638,7 @@ function makeWpUser(userName) {
     user_pass: 'disabled',
     user_nicename: wpLoginFor(userName),
     user_email: 'disabled',
+    user_registered: new Date(),
     display_name: userName
   }
 }
@@ -632,11 +649,7 @@ function wpLoginFor(userName) {
 
 function insertUsers(users) {
   const promises = users.map(user => {
-    return insertIfMissing(
-      'wp_users',
-      { user_login: user.user_login },
-      effiwp('wp_users').insert(user)
-    )
+    return upsert('wp_users', { user_login: user.user_login }, user)
   })
   return Promise.all(promises)
 }
@@ -662,8 +675,21 @@ function makeWpRedirect(src, target, optsIn) {
     status: 'enabled',
     action_type: 'url',
     action_code: 301,
-    match_type: 'url'
+    match_type: 'url',
+    last_access: new Date()
   }
+}
+
+function upsert(table, where, object) {
+  return effiwp(table)
+    .where(where)
+    .then(rows =>
+      rows.length === 0
+        ? effiwp(table).insert(object)
+        : effiwp(table)
+            .where(where)
+            .update(object)
+    )
 }
 
 function insertIfMissing(table, where, insertQuery) {
