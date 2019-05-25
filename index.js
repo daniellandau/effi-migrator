@@ -33,7 +33,6 @@ function handleNode(node) {
       .select('dst')
       .where('src', `node/${node.nid}`)
   ]).then(([post_author_latin, urls]) => {
-    console.log('latin', post_author_latin)
     if (urls.length === 0) return null
 
     const oldUrls = [].concat
@@ -60,7 +59,6 @@ function handleNode(node) {
     const post_date = new Date(node.created * 1000)
     const post_title = encoding.convert(node.title, 'latin1', 'UTF-8')
     const post_author = post_author_latin // encoding.convert(post_author_latin, 'latin1', 'UTF-8')
-    console.log('post', post_author)
     const post_content = encoding.convert(
       node.body.replace(new RegExp(`<h.>${node.title}</h.>`), ''),
       'latin1',
@@ -306,8 +304,10 @@ const oldOldExplicitRedirects = () => {
 }
 
 const categories = {
+  'julkaisut/lausunnot': 'Lausunnot',
   'julkaisut/kirjeet': 'Kirjeet',
   'julkaisut/puheet': 'Puheet',
+  'julkaisut/tiedotteet': 'Tiedotteet',
   'roskaposti/': 'Roskaposti',
   'tekijanoikeus/muut/': 'Tekijänoikeus, muut',
   'tekijanoikeus/aanitteet/': 'Tekijänoikeus, äänitteet',
@@ -318,11 +318,23 @@ const categories = {
   effialert: 'Effialert'
 }
 
+const categoryAliases = {
+  'lausunnot': 'Lausunnot',
+}
+
 function categoryForArticle(article) {
   const key = Object.keys(categories).find(category =>
     article.filename.startsWith(category)
   )
+  const aliasKey = Object.keys(categoryAliases).find(category =>
+    {
+      console.log(article)
+      return article.filename.startsWith(category)
+    }
+  )
+
   if (key) return categories[key]
+  if (aliasKey) return categoryAliases[aliasKey]
   return 'Yleinen'
 }
 
@@ -500,15 +512,15 @@ const feedRedirects = () => {
   )
 }
 
-oldWinstonUsers.then(oldWinstonArticles).then(console.log)
-// oldWinstonUsers.then(oldWinstonFiles).then(console.log)
+// oldWinstonUsers.then(oldWinstonArticles).then(console.log)
+oldWinstonUsers.then(oldWinstonFiles).then(console.log)
 // oldOldEffiUsers()
 //   .then(oldOldArticles)
 //   .then(oldOldAttachments)
 // oldOldSpecificArticles().then(console.log)
 //   .then(oldOldExplicitRedirects)
 // feedRedirects().then(console.log)
-// oldOldCategories().then(console.log)
+/* oldOldCategories().then(console.log) */
 // oldWinstonCategories().then(console.log)
 
 function makeWpArticle(article) {

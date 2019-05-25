@@ -34,7 +34,7 @@ module.exports = {
     client: 'mysql',
     connection: {
       database: 'wordpress',
-      user:     'effiwp',
+      user:     'root',
       password: process.env.EFFIWP_PASSWORD
     },
     pool: {
